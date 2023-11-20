@@ -1,50 +1,56 @@
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState } from "react";
 import { button, container } from "./index.css";
 import Photo from "./components/Photo";
 import { getPhoto } from "./service/photo";
 
+let debounceFetchTimer: number;
+
 const IntersectionObserverPage: React.FC = () => {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [pageNumber, setPageNumber] = useState(1);
-  const [isPending, startTransition] = useTransition();
   const pageEnd = useRef(null);
-  let num = 1;
 
   const fetchPhotos = async (pageNumber: number) => {
-    startTransition(() => {
-      if (isPending) return;
-      getPhoto(pageNumber).then((newPhotos) => {
-        setPhotos((prevPhotos) => [...prevPhotos, ...newPhotos]);
-      });
+    getPhoto(pageNumber).then((newPhotos) => {
+      setPhotos((prevPhotos) => [...prevPhotos, ...newPhotos]);
     });
   };
 
   useEffect(() => {
-    fetchPhotos(pageNumber);
+    clearTimeout(debounceFetchTimer);
+    debounceFetchTimer = setTimeout(() => {
+      fetchPhotos(pageNumber);
+    }, 300);
   }, [pageNumber]);
 
   useEffect(() => {
-    if (!isPending) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries[0].isIntersecting) {
-            num += 1;
-            loadMore();
-            if (num >= 10 && pageEnd.current) {
-              observer.unobserve(pageEnd.current);
-            }
-          }
-        },
-        { threshold: 1 }
-      );
-      if (pageEnd.current) {
-        observer.observe(pageEnd?.current);
-      }
+    let debounceTimer: number;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+          loadMore();
+        }, 300);
+      },
+      { threshold: 1 }
+    );
+
+    if (pageEnd.current) {
+      observer.observe(pageEnd.current);
     }
-  }, [isPending, num]);
+
+    return () => {
+      if (pageEnd.current) {
+        observer.unobserve(pageEnd.current);
+      }
+      clearTimeout(debounceTimer);
+    };
+  }, []);
 
   const loadMore = () => {
-    setPageNumber((prevPageNumber) => prevPageNumber + 1);
+    setPageNumber((prevPageNumber) => prevPageNumber + 1); // 페이지 번호 상태 업데이트
   };
 
   return (
